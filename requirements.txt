@@ -1,0 +1,6 @@
+numpy
+pyaudio
+torch
+transformers
+ctranslate2
+sentencepiece

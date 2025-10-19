@@ -1,0 +1,89 @@
+# main.py
+
+import tkinter as tk
+from tkinter import scrolledtext
+import queue
+import os
+import pyaudio
+
+from utils.listener import AudioListener
+
+# --- CONFIGURAÇÕES ---
+# ID do modelo original no Hugging Face (usado para o processador de áudio)
+ORIGINAL_MODEL_ID = "pierreguillou/whisper-medium-portuguese"
+# Caminho EXATO para a pasta local com o modelo JÁ CONVERTIDO (corrigido para o seu nome de pasta)
+LOCAL_MODEL_PATH = "./whisper-medium-pt-ct2"
+
+AUDIO_CONFIG = {
+    "CHUNK_SIZE": 1024,
+    "FORMAT": pyaudio.paInt16,
+    "CHANNELS": 1,
+    "RATE": 16000,
+    "SILENCE_THRESHOLD": 600,
+    "SILENCE_DURATION": 1.5,
+}
+
+# --- VERIFICAÇÃO INICIAL ---
+if not os.path.isdir(LOCAL_MODEL_PATH):
+    print(f"ERRO: Pasta do modelo convertido não encontrada em '{LOCAL_MODEL_PATH}'")
+    print("Verifique se a pasta existe e se o caminho está correto.")
+    exit()
+
+# --- LÓGICA DA APLICAÇÃO ---
+text_queue = queue.Queue()
+# A chamada agora corresponde exatamente ao __init__ do listener.py
+audio_listener = AudioListener(
+    model_id_original=ORIGINAL_MODEL_ID,
+    model_path_local=LOCAL_MODEL_PATH,
+    text_queue=text_queue, 
+    config=AUDIO_CONFIG
+)
+
+def iniciar_escuta():
+    audio_listener.start()
+    start_button.config(state=tk.DISABLED)
+    stop_button.config(state=tk.NORMAL)
+    status_label.config(text="Ouvindo...")
+
+def parar_escuta():
+    audio_listener.stop()
+    start_button.config(state=tk.NORMAL)
+    stop_button.config(state=tk.DISABLED)
+    status_label.config(text="Pronto.")
+
+def verificar_fila_gui():
+    try:
+        texto = text_queue.get_nowait()
+        if "ERRO:" in texto:
+            memoria_widget.insert(tk.END, f"{texto}\n\n", "error")
+        else:
+            memoria_widget.insert(tk.END, f"> {texto}\n\n")
+        memoria_widget.see(tk.END)
+    except queue.Empty:
+        pass
+    finally:
+        app.after(100, verificar_fila_gui)
+
+def ao_fechar():
+    parar_escuta()
+    app.destroy()
+
+app = tk.Tk()
+app.title("Assistente Virtual - Transformers")
+app.geometry("700x500")
+app.configure(bg="#2b2b2b")
+status_label = tk.Label(app, text="Pronto.", font=("Segoe UI", 12), pady=10, bg="#2b2b2b", fg="white")
+status_label.pack()
+memoria_widget = scrolledtext.ScrolledText(app, wrap=tk.WORD, font=("Consolas", 14), state=tk.NORMAL, bg="#1e1e1e", fg="#d4d4d4", insertbackground="white", relief="flat")
+memoria_widget.tag_config("error", foreground="red")
+memoria_widget.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+button_frame = tk.Frame(app, bg="#2b2b2b")
+button_frame.pack(pady=10)
+start_button = tk.Button(button_frame, text="Iniciar Escuta", command=iniciar_escuta, font=("Segoe UI", 12), bg="#4CAF50", fg="white", relief="flat", padx=10)
+start_button.pack(side=tk.LEFT, padx=5)
+stop_button = tk.Button(button_frame, text="Parar Escuta", command=parar_escuta, font=("Segoe UI", 12), state=tk.DISABLED, bg="#f44336", fg="white", relief="flat", padx=10)
+stop_button.pack(side=tk.LEFT, padx=5)
+
+app.protocol("WM_DELETE_WINDOW", ao_fechar)
+verificar_fila_gui()
+app.mainloop()
