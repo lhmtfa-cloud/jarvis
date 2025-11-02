@@ -1,17 +1,11 @@
-# utils/text_processor.py
-
 import re
+from typing import Tuple
 from modules.file_system import FOLDER_ALIASES
 
 def normalize_text(text: str) -> str:
-    """Converte o texto para minúsculas, remove pontuações e trata hífens."""
-    # A MUDANÇA ESTÁ AQUI: .replace('-', ' ') para separar palavras como "avise-me"
     return text.lower().strip().replace('.', '', 1).replace(',', '').replace('-', ' ')
 
-def extract_file_command_parts(text: str) -> (str, str):
-    """
-    Tenta extrair o nome da pasta e do arquivo de um comando de voz de forma flexível.
-    """
+def extract_file_command_parts(text: str) -> Tuple[str, str]:
     text = normalize_text(text)
     found_folder, file_name = None, None
     for alias in FOLDER_ALIASES.keys():
@@ -27,10 +21,8 @@ def extract_file_command_parts(text: str) -> (str, str):
                     file_name = potential_file_name
             break
     return found_folder, file_name
-# utils/text_processor.py - VERSÃO CORRIGIDA
 
-def extract_whatsapp_command(text: str) -> (str, str):
-
+def extract_whatsapp_command(text: str) -> Tuple[str, str]:
     text = normalize_text(text)
     
     match = re.search(r'^(?:avise|mande|envie|fale para|whatsapp|zap)\s+([a-zA-Z\s]+?)\s+(?:que\s+)?(.*)', text)

@@ -1,5 +1,3 @@
-# utils/listener.py
-
 import pyaudio
 import threading
 import wave
@@ -18,6 +16,7 @@ class AudioListener:
         self.p = pyaudio.PyAudio()
         self.stream = None
         self.stop_event = threading.Event()
+        self.pause_event = threading.Event() 
         self.listening_thread = None
         self.compute_type = compute_type
         self.beam_size = beam_size
@@ -53,10 +52,17 @@ class AudioListener:
         print(">>> Assistente pronto e ouvindo... <<<")
 
         while not self.stop_event.is_set():
+            if self.pause_event.is_set():
+                time.sleep(0.1)
+                continue
+            
             frames = []
             is_speaking = False
             
             while not self.stop_event.is_set():
+                if self.pause_event.is_set():
+                    time.sleep(0.1)
+                    continue
                 try:
                     data = self.stream.read(self.config['CHUNK_SIZE'], exception_on_overflow=False)
                     audio_data = np.frombuffer(data, dtype=np.int16)
@@ -73,6 +79,9 @@ class AudioListener:
             max_silent_chunks = (self.config['RATE'] / self.config['CHUNK_SIZE']) * self.config['SILENCE_DURATION']
             
             while not self.stop_event.is_set():
+                if self.pause_event.is_set():
+                    time.sleep(0.1)
+                    continue
                 try:
                     data = self.stream.read(self.config['CHUNK_SIZE'], exception_on_overflow=False)
                     frames.append(data)
@@ -115,8 +124,17 @@ class AudioListener:
     def start(self):
         if self.listening_thread is None or not self.listening_thread.is_alive():
             self.stop_event.clear()
+            self.pause_event.clear()
             self.listening_thread = threading.Thread(target=self._listen_and_transcribe, daemon=True)
             self.listening_thread.start()
 
     def stop(self):
         self.stop_event.set()
+
+    def pause(self):
+        self.pause_event.set()
+        print(">>> Processamento de áudio pausado. <<<")
+
+    def resume(self):
+        self.pause_event.clear()
+        print(">>> Processamento de áudio retomado. <<<")

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assistente</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        #header {
+            padding: 15px;
+            background-color: #1e1e1e;
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #header h1 {
+            margin: 0;
+            font-size: 1.2em;
+        }
+        #controls {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        .control-group {
+            display: flex;
+            align-items: center;
+            font-size: 0.9em;
+        }
+        .control-group label {
+            margin-right: 8px;
+        }
+        #status {
+            font-size: 0.9em;
+            color: #888;
+        }
+        #log-container {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+        .message {
+            max-width: 80%;
+            padding: 10px 15px;
+            border-radius: 18px;
+            margin-bottom: 10px;
+            line-height: 1.4;
+        }
+        .user {
+            background-color: #0055a0;
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+        }
+        .assistant {
+            background-color: #333;
+            color: #e0e0e0;
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+        .error {
+            background-color: #d32f2f;
+            color: white;
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="header">
+        <h1>Assistente</h1>
+        <div id="controls">
+            <div id="status">Ouvindo...</div>
+            <button id="pause-button" style="padding: 5px 10px;">Pausar</button>
+            <div class="control-group">
+                <label for="tts-toggle">Falar Respostas</label>
+                <input type="checkbox" id="tts-toggle" checked>
+            </div>
+        </div>
+    </div>
+
+    <div id="log-container">
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', (event) => {
+            const socket = io();
+            const logContainer = document.getElementById('log-container');
+            const ttsToggle = document.getElementById('tts-toggle');
+            const pauseButton = document.getElementById('pause-button');
+            const statusLabel = document.getElementById('status');
+            let isPaused = false;
+
+            socket.on('connect', () => {
+                console.log('Conectado ao servidor Socket.IO');
+            });
+
+            socket.on('new_message', (msg) => {
+                const msgElement = document.createElement('div');
+                msgElement.textContent = `${msg.text}`;
+                
+                if (msg.sender === 'VOCÊ') {
+                    msgElement.className = 'message user';
+                } else if (msg.sender === 'ASSISTENTE') {
+                    msgElement.className = 'message assistant';
+                } else if (msg.sender === 'ERRO') {
+                    msgElement.className = 'message error';
+                }
+                
+                logContainer.appendChild(msgElement);
+                logContainer.scrollTop = logContainer.scrollHeight;
+            });
+
+            socket.on('status_update', (data) => {
+                statusLabel.textContent = data.text;
+            });
+
+            ttsToggle.addEventListener('change', function() {
+                socket.emit('toggle_tts', { enabled: this.checked });
+            });
+
+            pauseButton.addEventListener('click', function() {
+                isPaused = !isPaused;
+                socket.emit('toggle_pause', { paused: isPaused });
+                if (isPaused) {
+                    pauseButton.textContent = 'Retomar';
+                    statusLabel.textContent = 'Pausado';
+                } else {
+                    pauseButton.textContent = 'Pausar';
+                    statusLabel.textContent = 'Ouvindo...';
+                }
+            });
+        });
+    </script>
+</body>
+</html>
