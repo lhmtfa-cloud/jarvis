@@ -15,14 +15,16 @@
             display: flex;
             flex-direction: column;
             height: 100vh;
+            overflow: hidden; /* Evita scroll no body */
         }
         #header {
-            padding: 15px;
+            padding: 15px 20px;
             background-color: #1e1e1e;
             border-bottom: 1px solid #333;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-shrink: 0;
         }
         #header h1 {
             margin: 0;
@@ -41,10 +43,21 @@
         .control-group label {
             margin-right: 8px;
         }
-        #status {
+        #header-status {
             font-size: 0.9em;
             color: #888;
+            min-width: 100px;
         }
+
+        /* --- NOVO WRAPPER DE CONTEÚDO --- */
+        #content-wrapper {
+            display: flex;
+            flex-direction: row;
+            flex-grow: 1;
+            height: 100%;
+            overflow: hidden; /* Garante que os filhos controlem o scroll */
+        }
+
         #log-container {
             flex-grow: 1;
             overflow-y: auto;
@@ -58,6 +71,7 @@
             border-radius: 18px;
             margin-bottom: 10px;
             line-height: 1.4;
+            word-wrap: break-word;
         }
         .user {
             background-color: #0055a0;
@@ -77,6 +91,58 @@
             align-self: flex-start;
             border-bottom-left-radius: 4px;
         }
+
+        /* --- PAINEL DE ANÁLISE (NOVO) --- */
+        #analysis-panel {
+            flex-basis: 300px;
+            flex-shrink: 0;
+            background-color: #1e1e1e;
+            border-left: 1px solid #333;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+        #analysis-panel h2 {
+            margin-top: 0;
+            font-size: 1.1em;
+            color: #aaa;
+            border-bottom: 1px solid #444;
+            padding-bottom: 10px;
+        }
+        #analysis-panel h3 {
+            font-size: 0.9em;
+            color: #888;
+            text-transform: uppercase;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        #current-stage-display {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #4caf50; /* Verde (Ouvindo) */
+            margin-bottom: 20px;
+        }
+        #timing-log {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            font-size: 0.9em;
+        }
+        #timing-log li {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #2a2a2a;
+        }
+        #timing-log li strong {
+            color: #ccc;
+            font-weight: 500;
+        }
+        #timing-log li span {
+            color: #e0e0e0;
+            font-family: 'Courier New', Courier, monospace;
+        }
     </style>
 </head>
 <body>
@@ -84,7 +150,7 @@
     <div id="header">
         <h1>Assistente</h1>
         <div id="controls">
-            <div id="status">Ouvindo...</div>
+            <div id="header-status">Ouvindo...</div>
             <button id="pause-button" style="padding: 5px 10px;">Pausar</button>
             <div class="control-group">
                 <label for="tts-toggle">Falar Respostas</label>
@@ -93,7 +159,22 @@
         </div>
     </div>
 
-    <div id="log-container">
+    <div id="content-wrapper">
+        
+        <div id="log-container">
+        </div>
+
+        <div id="analysis-panel">
+            <h2>Análise de Processo</h2>
+            
+            <h3>Etapa Atual</h3>
+            <div id="current-stage-display">Ouvindo...</div>
+            
+            <h3>Tempos (últimas etapas)</h3>
+            <ul id="timing-log">
+                </ul>
+        </div>
+
     </div>
 
     <script>
@@ -102,7 +183,12 @@
             const logContainer = document.getElementById('log-container');
             const ttsToggle = document.getElementById('tts-toggle');
             const pauseButton = document.getElementById('pause-button');
-            const statusLabel = document.getElementById('status');
+            
+            // --- Seletores de Análise (Novos) ---
+            const headerStatus = document.getElementById('header-status');
+            const currentStageDisplay = document.getElementById('current-stage-display');
+            const timingLog = document.getElementById('timing-log');
+
             let isPaused = false;
 
             socket.on('connect', () => {
@@ -125,8 +211,36 @@
                 logContainer.scrollTop = logContainer.scrollHeight;
             });
 
+            // --- Handler de Status (Modificado) ---
             socket.on('status_update', (data) => {
-                statusLabel.textContent = data.text;
+                // 1. Atualiza os dois labels de status
+                headerStatus.textContent = data.text;
+                currentStageDisplay.textContent = data.text;
+
+                // 2. Muda a cor do status atual
+                if (data.text.includes('Ouvindo')) {
+                    currentStageDisplay.style.color = '#4caf50'; // Verde
+                } else if (data.text.includes('Processando') || data.text.includes('Transcrevendo')) {
+                    currentStageDisplay.style.color = '#ffeb3b'; // Amarelo
+                } else if (data.text.includes('Falando')) {
+                    currentStageDisplay.style.color = '#2196f3'; // Azul
+                } else if (data.text.includes('Pausado')) {
+                    currentStageDisplay.style.color = '#f44336'; // Vermelho
+                } else {
+                    currentStageDisplay.style.color = '#e0e0e0'; // Padrão
+                }
+
+                // 3. Adiciona ao log de tempo se for uma etapa finalizada
+                if (data.last_stage && data.duration > 0) {
+                    const li = document.createElement('li');
+                    li.innerHTML = `<strong>${data.last_stage}:</strong> <span>${data.duration.toFixed(2)}s</span>`;
+                    timingLog.prepend(li); // Adiciona no topo
+
+                    // 4. Limita o log para não sobrecarregar
+                    if (timingLog.children.length > 30) {
+                        timingLog.removeChild(timingLog.lastChild);
+                    }
+                }
             });
 
             ttsToggle.addEventListener('change', function() {
@@ -138,10 +252,15 @@
                 socket.emit('toggle_pause', { paused: isPaused });
                 if (isPaused) {
                     pauseButton.textContent = 'Retomar';
-                    statusLabel.textContent = 'Pausado';
+                    // Atualiza os status manualmente
+                    headerStatus.textContent = 'Pausado';
+                    currentStageDisplay.textContent = 'Pausado';
+                    currentStageDisplay.style.color = '#f44336'; // Vermelho
                 } else {
                     pauseButton.textContent = 'Pausar';
-                    statusLabel.textContent = 'Ouvindo...';
+                    headerStatus.textContent = 'Ouvindo...';
+                    currentStageDisplay.textContent = 'Ouvindo...';
+                    currentStageDisplay.style.color = '#4caf50'; // Verde
                 }
             });
         });

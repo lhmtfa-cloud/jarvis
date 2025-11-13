@@ -16,7 +16,7 @@ AUDIO_CONFIG = {
     "CHANNELS": 1,
     "RATE": 16000,
     "SILENCE_THRESHOLD": 600,
-    "SILENCE_DURATION": 1.5,
+    "SILENCE_DURATION": 2,
 }
 
 if not os.path.isdir(LOCAL_MODEL_PATH):

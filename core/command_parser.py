@@ -4,6 +4,7 @@ from utils import text_processor, vision
 from modules import file_system
 from modules import whatsapp_automator
 import core.macro_manager as macro_manager
+from core.vocabulary import ACTION_KEYWORDS_OPEN
 
 is_admin_mode = False
 last_admin_time = 0
@@ -75,44 +76,59 @@ def processar_comando_basico(comando, executar=True):
 def parse_and_execute(transcribed_text: str) -> str:
     global is_admin_mode, last_admin_time
     
+    normalized_text = text_processor.normalize_text(transcribed_text)
+
     if is_admin_mode and (time.time() - last_admin_time > 300):
         is_admin_mode = False
         return "Saindo do modo admin por inatividade."
 
-    if any(s in transcribed_text for s in ["modo número 0012"]):
+    if "modo" in normalized_text and "0012" in normalized_text:
         is_admin_mode = True
         last_admin_time = time.time()
         return "Modo administrador ativado."
 
-    if any(s in transcribed_text for s in ["sair do modo admin"]):
+    if "sair do modo admin" in normalized_text:
         is_admin_mode = False
         return "Modo administrador desativado."
 
-    if is_admin_mode and any(transcribed_text.startswith(s) for s in ["aprenda a", "brenda a", "apagar macro", "sobrescrever macro"]):
+    if is_admin_mode and any(normalized_text.startswith(s) for s in ["aprenda a", "brenda a", "apagar macro", "sobrescrever macro"]):
         last_admin_time = time.time()
-        return macro_manager.processar_comando_admin(transcribed_text)
+        return macro_manager.processar_comando_admin(normalized_text)
     
-    if "whatsapp" in transcribed_text or "zap" in transcribed_text or "avise" in transcribed_text:
-        contact, message = text_processor.extract_whatsapp_command(transcribed_text)
-        if contact and message:
-            return whatsapp_automator.send_message_to_contact(contact, message)
+    
+    contact, message = text_processor.extract_whatsapp_command(normalized_text)
+    if contact and message:
+        return whatsapp_automator.send_message_to_contact(contact, message)
 
-    folder_name, file_name = text_processor.extract_file_command_parts(transcribed_text)
-    if folder_name and file_name:
+    if any(word in normalized_text for word in ACTION_KEYWORDS_OPEN) and "whatsapp" in normalized_text:
+        return whatsapp_automator.open_whatsapp()
+
+
+
+
+    action, folder_name, file_name = text_processor.extract_file_command_parts(normalized_text)
+    
+    if action and folder_name and file_name:
         path = file_system.find_folder_path(folder_name)
         if not path:
             return f"Não conheço a pasta '{folder_name}'."
+        
         best_match_filename = file_system.find_closest_file_match(file_name, path)
         if not best_match_filename:
             return f"Não encontrei nada parecido com '{file_name}' na pasta '{folder_name}'."
+        
         full_path = os.path.join(path, best_match_filename)
-        return file_system.open_explorer_and_select(full_path)
-    
-    resultado_basico = processar_comando_basico(transcribed_text, executar=True)
+        
+        if action == "open":
+            return file_system.open_file(full_path)
+        elif action == "select":
+            return file_system.select_file_in_explorer(full_path)
+
+    resultado_basico = processar_comando_basico(normalized_text, executar=True)
     if resultado_basico:
         return resultado_basico
 
-    resultado_macro = macro_manager.executar_macro(transcribed_text)
+    resultado_macro = macro_manager.executar_macro(normalized_text)
     if resultado_macro:
         return resultado_macro
         

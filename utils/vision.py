@@ -22,8 +22,7 @@ def inicializar(falar_func):
 
 def preprocessar_para_ocr(imagem):
     imagem_em_escala_de_cinza = imagem.convert('L')
-    imagem_invertida = ImageOps.invert(imagem_em_escala_de_cinza)
-    return imagem_invertida
+    return imagem_em_escala_de_cinza
 
 def _costurar_texto(lista_de_textos):
     if not lista_de_textos: return ""
