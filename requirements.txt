@@ -4,3 +4,8 @@ torch
 transformers
 ctranslate2
 sentencepiece
+flask
+pyttsx3
+flask_socketio
+pynput
+pytesseract

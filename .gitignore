@@ -1,1 +1,6 @@
-whisper-medium-pt-ct2/model.bin
+
+whisper_cpp/
+modelos/whisper_cpp/
+whisper-medium-pt-ct2/
+.venv/
+img/

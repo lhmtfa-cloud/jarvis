@@ -1,5 +1,3 @@
-# utils/listener.py
-
 import pyaudio
 import threading
 import wave
@@ -18,6 +16,7 @@ class AudioListener:
         self.p = pyaudio.PyAudio()
         self.stream = None
         self.stop_event = threading.Event()
+        self.pause_event = threading.Event() 
         self.listening_thread = None
         self.compute_type = compute_type
         self.beam_size = beam_size
@@ -38,7 +37,7 @@ class AudioListener:
         except Exception as e:
             error_message = f"ERRO ao carregar o modelo/processador: {e}"
             print(error_message)
-            self.text_queue.put(error_message)
+            self.text_queue.put({"type": "error", "text": error_message})
             return False
 
     def _listen_and_transcribe(self):
@@ -53,10 +52,20 @@ class AudioListener:
         print(">>> Assistente pronto e ouvindo... <<<")
 
         while not self.stop_event.is_set():
+            
+            if self.pause_event.is_set():
+                time.sleep(0.1)
+                continue
+            
             frames = []
             is_speaking = False
             
             while not self.stop_event.is_set():
+                
+                if self.pause_event.is_set():
+                    is_speaking = False 
+                    break 
+                
                 try:
                     data = self.stream.read(self.config['CHUNK_SIZE'], exception_on_overflow=False)
                     audio_data = np.frombuffer(data, dtype=np.int16)
@@ -64,15 +73,21 @@ class AudioListener:
                     if volume > self.config['SILENCE_THRESHOLD']:
                         is_speaking = True
                         frames.append(data)
-                        break
+                        break 
                 except IOError: continue
             
-            if not is_speaking: continue
+            if not is_speaking:
+                continue
 
             silent_chunks = 0
             max_silent_chunks = (self.config['RATE'] / self.config['CHUNK_SIZE']) * self.config['SILENCE_DURATION']
             
             while not self.stop_event.is_set():
+                
+                if self.pause_event.is_set():
+                    frames = [] 
+                    break 
+                
                 try:
                     data = self.stream.read(self.config['CHUNK_SIZE'], exception_on_overflow=False)
                     frames.append(data)
@@ -82,9 +97,10 @@ class AudioListener:
                         silent_chunks = 0
                     else:
                         silent_chunks += 1
+                    
                     if silent_chunks > max_silent_chunks:
                         self._process_audio(b''.join(frames))
-                        break
+                        break 
                 except IOError: continue
 
         if self.stream: self.stream.stop_stream(); self.stream.close()
@@ -92,6 +108,16 @@ class AudioListener:
         print(">>> Processo de escuta finalizado. <<<")
 
     def _process_audio(self, audio_bytes):
+        if self.pause_event.is_set():
+            return
+        
+        t_start_transcribe = time.time()
+        self.text_queue.put({
+            "type": "status", 
+            "text": "Transcrevendo...", 
+            "duration": 0
+        })
+        
         try:
             audio_array = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
 
@@ -107,16 +133,41 @@ class AudioListener:
             
             texto = self.processor.batch_decode(results[0].sequences_ids, skip_special_tokens=True)[0].strip()
             
+            t_end_transcribe = time.time()
+            duration = t_end_transcribe - t_start_transcribe
+            
             if texto:
-                self.text_queue.put(texto)
+                self.text_queue.put({
+                    "type": "text", 
+                    "text": texto, 
+                    "last_stage": "Transcrição",
+                    "duration": round(duration, 2)
+                })
+            else:
+                self.text_queue.put({
+                    "type": "status", 
+                    "text": "Ouvindo...", 
+                    "last_stage": "Transcrição (Vazia)",
+                    "duration": round(duration, 2)
+                })
+
         except Exception as e:
-            self.text_queue.put(f"ERRO na transcrição: {e}")
+            self.text_queue.put({"type": "error", "text": f"ERRO na transcrição: {e}"})
 
     def start(self):
         if self.listening_thread is None or not self.listening_thread.is_alive():
             self.stop_event.clear()
+            self.pause_event.clear()
             self.listening_thread = threading.Thread(target=self._listen_and_transcribe, daemon=True)
             self.listening_thread.start()
 
     def stop(self):
         self.stop_event.set()
+
+    def pause(self):
+        self.pause_event.set()
+        print(">>> Processamento de áudio pausado. <<<")
+
+    def resume(self):
+        self.pause_event.clear()
+        print(">>> Processamento de áudio retomado. <<<")
